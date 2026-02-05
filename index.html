@@ -4,14 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Rocket Duel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #0a0f1a;
-      --panel: #111b2d;
-      --accent: #6ee7ff;
-      --danger: #ff6b6b;
-      --success: #8bff9f;
-      --text: #e6eef7;
+      --bg: #05070f;
+      --panel: rgba(5, 10, 20, 0.7);
+      --accent: #54d5ff;
+      --danger: #ff4fd8;
+      --success: #ffe66d;
+      --text: #e8f7ff;
+      --neon-blue: #52d8ff;
+      --neon-pink: #ff43c6;
+      --neon-yellow: #ffd86b;
+      --neon-purple: #a64dff;
     }
 
     html, body {
@@ -21,7 +28,7 @@
       height: 100%;
       background: var(--bg);
       color: var(--text);
-      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-family: "Press Start 2P", "Segoe UI", system-ui, -apple-system, sans-serif;
       overflow: hidden;
       touch-action: none;
     }
@@ -31,52 +38,124 @@
       place-items: center;
       width: 100%;
       height: 100%;
+      position: relative;
     }
 
     canvas {
-      background: radial-gradient(circle at 50% 30%, #1d2b44 0%, #0a0f1a 70%);
-      border: 2px solid #1e2c45;
-      border-radius: 16px;
+      background: #05070f;
+      border: 4px solid #9a3cff;
+      border-radius: 20px;
       width: min(92vw, 400px);
       height: auto;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.08),
+        0 0 26px rgba(141, 64, 255, 0.5),
+        0 30px 60px rgba(0, 0, 0, 0.65);
       touch-action: none;
     }
 
     #hud {
       position: absolute;
-      top: 12px;
+      top: 18px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(10, 15, 26, 0.65);
-      padding: 8px 18px;
-      border-radius: 999px;
-      font-size: 14px;
-      letter-spacing: 0.4px;
+      width: min(86vw, 360px);
       display: flex;
-      gap: 18px;
-      align-items: center;
+      justify-content: space-between;
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
     }
 
-    #hud span {
-      font-weight: 600;
+    .hud-section {
+      flex: 1;
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 8px 10px;
+      border-radius: 12px;
+      display: grid;
+      gap: 6px;
+      position: relative;
+      overflow: hidden;
+      text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+    }
+
+    .hud-section::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.45;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+      pointer-events: none;
+    }
+
+    .hud-title {
+      font-size: 10px;
+      color: var(--neon-blue);
+    }
+
+    .hud-score {
+      font-size: 14px;
+      color: var(--text);
+    }
+
+    .hud-bar {
+      height: 4px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), currentColor);
+      box-shadow: 0 0 6px currentColor;
     }
 
     #status {
       position: absolute;
-      bottom: 18px;
+      top: 120px;
       left: 50%;
       transform: translateX(-50%);
-      padding: 10px 18px;
-      background: rgba(17, 27, 45, 0.85);
+      padding: 8px 14px;
+      background: rgba(6, 10, 18, 0.7);
       border-radius: 12px;
-      font-size: 14px;
+      font-size: 12px;
+      letter-spacing: 1px;
       text-align: center;
-      max-width: 300px;
+      color: var(--neon-yellow);
+      text-shadow: 0 0 10px rgba(255, 216, 107, 0.6);
     }
 
     #status strong {
-      color: var(--accent);
+      color: var(--neon-yellow);
+    }
+
+    #footer {
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(86vw, 360px);
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .footer-pill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(8, 12, 24, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+    }
+
+    .footer-pill.ready {
+      color: var(--neon-blue);
+      box-shadow: 0 0 12px rgba(82, 216, 255, 0.4);
+    }
+
+    .footer-pill.waiting {
+      color: var(--neon-pink);
+      box-shadow: 0 0 12px rgba(255, 67, 198, 0.4);
     }
   </style>
 </head>
@@ -84,12 +163,23 @@
   <div id="game-shell">
     <canvas id="game" width="360" height="640"></canvas>
     <div id="hud">
-      <span>Player: <span id="score-player">0</span></span>
-      <span>AI: <span id="score-ai">0</span></span>
+      <div class="hud-section">
+        <div class="hud-title">Player</div>
+        <div class="hud-score">02 <span id="score-player">0</span></div>
+        <div class="hud-bar" style="color: var(--neon-blue);"></div>
+      </div>
+      <div class="hud-section" style="text-align: right;">
+        <div class="hud-title" style="color: var(--neon-pink);">AI</div>
+        <div class="hud-score">01 <span id="score-ai">0</span></div>
+        <div class="hud-bar" style="color: var(--neon-pink);"></div>
+      </div>
     </div>
     <div id="status">
-      <strong>Rocket Duel</strong><br />
-      Left side drag = rotate/thrust. Right side tap/hold = fire.
+      <strong>LAND TO WIN!</strong>
+    </div>
+    <div id="footer">
+      <div class="footer-pill ready">Ready</div>
+      <div class="footer-pill waiting">Waiting</div>
     </div>
   </div>
 
@@ -115,10 +205,15 @@
       sideBoundary: 6,
     };
 
+    const visuals = {
+      stars: [],
+      sparkles: [],
+    };
+
     const platforms = [
-      { x: 40, y: 520, w: 120, h: 10 },
-      { x: 200, y: 380, w: 120, h: 10 },
-      { x: 110, y: 240, w: 140, h: 10 },
+      { x: 40, y: 520, w: 120, h: 10, color: "#56d7ff" },
+      { x: 200, y: 380, w: 120, h: 10, color: "#ff5bb3" },
+      { x: 110, y: 240, w: 140, h: 10, color: "#a76bff" },
     ];
 
     const walls = [
@@ -157,6 +252,7 @@
       fireTimer: 0,
       reaction: 0,
       takeoffTimer: 0,
+      recoveryTimer: 0,
     };
 
     function createRocket(kind, x, y, angle) {
@@ -196,7 +292,8 @@
       aiState.fireTimer = 0;
       aiState.reaction = 0;
       aiState.takeoffTimer = 0;
-      statusEl.innerHTML = "<strong>Rocket Duel</strong><br />Left side drag = rotate/thrust. Right side tap/hold = fire.";
+      aiState.recoveryTimer = 0;
+      statusEl.innerHTML = "<strong>LAND TO WIN!</strong>";
     }
 
     function clamp(value, min, max) {
@@ -288,6 +385,28 @@
         life: WORLD.bulletLife,
         owner: rocket.kind,
       });
+    }
+
+    function initVisuals() {
+      visuals.stars = [];
+      visuals.sparkles = [];
+      const starCount = 120;
+      for (let i = 0; i < starCount; i += 1) {
+        visuals.stars.push({
+          x: Math.random() * WORLD.width,
+          y: Math.random() * WORLD.height,
+          size: Math.random() < 0.2 ? 2 : 1,
+          hue: Math.random(),
+          twinkle: Math.random() * Math.PI * 2,
+        });
+      }
+      for (let i = 0; i < 12; i += 1) {
+        visuals.sparkles.push({
+          x: 20 + Math.random() * (WORLD.width - 40),
+          y: 60 + Math.random() * (WORLD.height - 120),
+          size: 4 + Math.random() * 4,
+        });
+      }
     }
 
     function updateRocket(rocket, dt, controls) {
@@ -407,6 +526,7 @@
 
       if (ai.landed) {
         aiState.takeoffTimer = 0.45;
+        aiState.recoveryTimer = 0.9;
         return { left: false, right: false, thrust: true, fire: false };
       }
 
@@ -417,6 +537,17 @@
           left: diff < -0.05,
           right: diff > 0.05,
           thrust: true,
+          fire: false,
+        };
+      }
+
+      if (aiState.recoveryTimer > 0) {
+        aiState.recoveryTimer -= dt;
+        const diff = normalizeAngle(-Math.PI / 2 - ai.angle);
+        return {
+          left: diff < -0.05,
+          right: diff > 0.05,
+          thrust: ai.vy > -40,
           fire: false,
         };
       }
@@ -558,9 +689,9 @@
       ctx.save();
       ctx.translate(rocket.x, rocket.y);
       ctx.rotate(rocket.angle + Math.PI / 2);
-      ctx.fillStyle = rocket.kind === "player" ? "#6ee7ff" : "#ffb86b";
-      ctx.strokeStyle = "rgba(255,255,255,0.4)";
-      ctx.lineWidth = 1;
+      ctx.fillStyle = rocket.kind === "player" ? "#7be7ff" : "#ff7adf";
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(0, -16);
       ctx.lineTo(10, 16);
@@ -569,7 +700,7 @@
       ctx.fill();
       ctx.stroke();
       if (!rocket.landed && rocket.alive) {
-        ctx.fillStyle = "rgba(255, 200, 120, 0.8)";
+        ctx.fillStyle = "rgba(255, 216, 107, 0.9)";
         ctx.beginPath();
         ctx.moveTo(-4, 16);
         ctx.lineTo(0, 26 + Math.random() * 6);
@@ -579,24 +710,104 @@
       ctx.restore();
     }
 
+    function drawBackground(time) {
+      ctx.fillStyle = "#05070f";
+      ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+
+      for (const star of visuals.stars) {
+        const twinkle = 0.5 + Math.sin(time * 2 + star.twinkle) * 0.5;
+        const alpha = 0.5 + twinkle * 0.5;
+        ctx.fillStyle = `rgba(240, 250, 255, ${alpha})`;
+        ctx.fillRect(star.x, star.y, star.size, star.size);
+      }
+
+      ctx.save();
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath();
+      ctx.arc(WORLD.width / 2, 170, 72, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      const planetGradient = ctx.createLinearGradient(0, 120, 0, 240);
+      planetGradient.addColorStop(0, "#ff48c4");
+      planetGradient.addColorStop(1, "#7527ff");
+      ctx.fillStyle = planetGradient;
+      ctx.fillRect(WORLD.width / 2 - 80, 90, 160, 160);
+      ctx.fillStyle = "rgba(10, 5, 40, 0.5)";
+      for (let i = 0; i < 8; i += 1) {
+        ctx.fillRect(WORLD.width / 2 - 80, 120 + i * 14, 160, 6);
+      }
+      ctx.restore();
+
+      ctx.strokeStyle = "rgba(120, 200, 255, 0.8)";
+      ctx.lineWidth = 1;
+      for (const sparkle of visuals.sparkles) {
+        ctx.beginPath();
+        ctx.moveTo(sparkle.x - sparkle.size, sparkle.y);
+        ctx.lineTo(sparkle.x + sparkle.size, sparkle.y);
+        ctx.moveTo(sparkle.x, sparkle.y - sparkle.size);
+        ctx.lineTo(sparkle.x, sparkle.y + sparkle.size);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = "#240b3d";
+      ctx.beginPath();
+      ctx.moveTo(0, WORLD.height - 160);
+      ctx.lineTo(40, WORLD.height - 180);
+      ctx.lineTo(80, WORLD.height - 150);
+      ctx.lineTo(130, WORLD.height - 190);
+      ctx.lineTo(180, WORLD.height - 150);
+      ctx.lineTo(230, WORLD.height - 180);
+      ctx.lineTo(280, WORLD.height - 140);
+      ctx.lineTo(330, WORLD.height - 170);
+      ctx.lineTo(WORLD.width, WORLD.height - 140);
+      ctx.lineTo(WORLD.width, WORLD.height);
+      ctx.lineTo(0, WORLD.height);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "#ff48c4";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, WORLD.height - 120);
+      ctx.lineTo(WORLD.width, WORLD.height - 120);
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(82, 216, 255, 0.4)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 9; i += 1) {
+        const y = WORLD.height - 30 - i * 12;
+        ctx.beginPath();
+        ctx.moveTo(40, y);
+        ctx.lineTo(WORLD.width - 40, y);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 7; i += 1) {
+        const x = 40 + i * 40;
+        ctx.beginPath();
+        ctx.moveTo(x, WORLD.height);
+        ctx.lineTo(WORLD.width / 2 + (x - WORLD.width / 2) * 0.4, WORLD.height - 120);
+        ctx.stroke();
+      }
+    }
+
     function draw() {
-      ctx.clearRect(0, 0, WORLD.width, WORLD.height);
+      const time = performance.now() / 1000;
+      drawBackground(time);
 
-      ctx.fillStyle = "rgba(110, 231, 255, 0.2)";
-      ctx.fillRect(0, WORLD.height - 4, WORLD.width, 4);
-
-      ctx.fillStyle = "#20314c";
+      ctx.fillStyle = "rgba(255, 85, 207, 0.4)";
       for (const wall of walls) {
         ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
       }
 
-      ctx.fillStyle = "#2d3f63";
       for (const platform of platforms) {
+        ctx.fillStyle = platform.color;
         ctx.fillRect(platform.x, platform.y, platform.w, platform.h);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+        ctx.fillRect(platform.x, platform.y - 2, platform.w, 2);
       }
 
       for (const bullet of state.bullets) {
-        ctx.fillStyle = bullet.owner === "player" ? "#6ee7ff" : "#ffb86b";
+        ctx.fillStyle = bullet.owner === "player" ? "#6ee7ff" : "#ff5bd5";
         ctx.beginPath();
         ctx.arc(bullet.x, bullet.y, 2.5, 0, Math.PI * 2);
         ctx.fill();
@@ -606,7 +817,7 @@
         if (rocket.alive) {
           drawRocket(rocket);
         } else {
-          ctx.fillStyle = "rgba(255, 107, 107, 0.7)";
+          ctx.fillStyle = "rgba(255, 90, 199, 0.7)";
           ctx.beginPath();
           ctx.arc(rocket.x, rocket.y, 18, 0, Math.PI * 2);
           ctx.fill();
@@ -687,6 +898,7 @@
       input.touchFire = false;
     });
 
+    initVisuals();
     resetRound();
     requestAnimationFrame(loop);
   </script>
