@@ -31,3 +31,26 @@ If you crash after getting the kill, the round is a draw.
 - Stay nearly upright.
 
 If any landing condition is missed, the rocket explodes.
+
+## Development Guidelines
+### Branching Rules
+- Features must always be developed in a feature branch.
+- Bug fixes must always be developed in a bugfix branch.
+- Always PR into main.
+
+### Branch Naming
+- Use `feature/<short-description>` for new features.
+- Use `bugfix/<short-description>` for fixes.
+
+### Pull Request Checklist
+- Summarize what changed and why.
+- List tests run (or explain why tests were not run).
+- Ensure at least one reviewer approves before merging.
+
+### Commit Messages
+- Use clear, action-oriented summaries (for example: `feat: add touch input hints`).
+
+### Definition of Done
+- Code reviewed and approved.
+- Tests (if applicable) are passing.
+- Documentation updated if behavior changes.
