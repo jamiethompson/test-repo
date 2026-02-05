@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Rocket Duel</title>
+  <style>
+    :root {
+      --bg: #0a0f1a;
+      --panel: #111b2d;
+      --accent: #6ee7ff;
+      --danger: #ff6b6b;
+      --success: #8bff9f;
+      --text: #e6eef7;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #game-shell {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    canvas {
+      background: radial-gradient(circle at 50% 30%, #1d2b44 0%, #0a0f1a 70%);
+      border: 2px solid #1e2c45;
+      border-radius: 16px;
+      width: min(92vw, 400px);
+      height: auto;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      touch-action: none;
+    }
+
+    #hud {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(10, 15, 26, 0.65);
+      padding: 8px 18px;
+      border-radius: 999px;
+      font-size: 14px;
+      letter-spacing: 0.4px;
+      display: flex;
+      gap: 18px;
+      align-items: center;
+    }
+
+    #hud span {
+      font-weight: 600;
+    }
+
+    #status {
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 18px;
+      background: rgba(17, 27, 45, 0.85);
+      border-radius: 12px;
+      font-size: 14px;
+      text-align: center;
+      max-width: 300px;
+    }
+
+    #status strong {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div id="game-shell">
+    <canvas id="game" width="360" height="640"></canvas>
+    <div id="hud">
+      <span>Player: <span id="score-player">0</span></span>
+      <span>AI: <span id="score-ai">0</span></span>
+    </div>
+    <div id="status">
+      <strong>Rocket Duel</strong><br />
+      Left side drag = rotate/thrust. Right side tap/hold = fire.
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scorePlayerEl = document.getElementById("score-player");
+    const scoreAiEl = document.getElementById("score-ai");
+    const statusEl = document.getElementById("status");
+
+    const WORLD = {
+      width: 360,
+      height: 640,
+      gravity: 110,
+      thrust: 240,
+      rotateSpeed: 2.6,
+      bulletSpeed: 280,
+      bulletLife: 1.4,
+      maxSafeVertical: 55,
+      maxSafeHorizontal: 40,
+      uprightTolerance: Math.PI / 12,
+      topBoundary: 10,
+      sideBoundary: 6,
+    };
+
+    const platforms = [
+      { x: 40, y: 520, w: 120, h: 10 },
+      { x: 200, y: 380, w: 120, h: 10 },
+      { x: 110, y: 240, w: 140, h: 10 },
+    ];
+
+    const walls = [
+      { x: 0, y: 300, w: 24, h: 170 },
+      { x: 336, y: 180, w: 24, h: 190 },
+      { x: 140, y: 450, w: 80, h: 20 },
+      { x: 90, y: 120, w: 24, h: 80 },
+    ];
+
+    const state = {
+      rockets: [],
+      bullets: [],
+      gameState: "playing",
+      pendingWinner: null,
+      winner: null,
+      scores: { player: 0, ai: 0 },
+      timeSinceEnd: 0,
+    };
+
+    const input = {
+      left: false,
+      right: false,
+      thrust: false,
+      fire: false,
+      fireHeld: false,
+      fireCooldown: 0,
+      touchRotate: 0,
+      touchThrust: false,
+      touchFire: false,
+    };
+
+    const aiState = {
+      mode: "combat",
+      landStage: "approach",
+      landTimer: 0,
+      groundedTimer: 0,
+      fireTimer: 0,
+      reaction: 0,
+    };
+
+    function createRocket(kind, x, y, angle) {
+      return {
+        kind,
+        x,
+        y,
+        vx: 0,
+        vy: 0,
+        angle,
+        alive: true,
+        landed: false,
+        justLanded: false,
+        lastBottom: y + 16,
+      };
+    }
+
+    function resetRound() {
+      state.rockets = [
+        createRocket("player", 80, 500, -Math.PI / 2),
+        createRocket("ai", 280, 360, -Math.PI / 2),
+      ];
+      state.rockets[0].landed = true;
+      state.rockets[1].landed = true;
+      state.rockets[0].y = platforms[0].y - 16;
+      state.rockets[1].y = platforms[1].y - 16;
+      state.rockets[0].x = platforms[0].x + platforms[0].w / 2;
+      state.rockets[1].x = platforms[1].x + platforms[1].w / 2;
+      state.bullets = [];
+      state.gameState = "playing";
+      state.pendingWinner = null;
+      state.winner = null;
+      state.timeSinceEnd = 0;
+      aiState.mode = "combat";
+      aiState.landStage = "approach";
+      aiState.landTimer = 0;
+      aiState.groundedTimer = 0;
+      aiState.fireTimer = 0;
+      aiState.reaction = 0;
+      statusEl.innerHTML = "<strong>Rocket Duel</strong><br />Left side drag = rotate/thrust. Right side tap/hold = fire.";
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function rectsIntersect(a, b) {
+      return (
+        a.x < b.x + b.w &&
+        a.x + a.w > b.x &&
+        a.y < b.y + b.h &&
+        a.y + a.h > b.y
+      );
+    }
+
+    function rocketRect(rocket) {
+      return { x: rocket.x - 10, y: rocket.y - 16, w: 20, h: 32 };
+    }
+
+    function tryLand(rocket, platform) {
+      const bottom = rocket.y + 16;
+      const fromAbove = rocket.lastBottom <= platform.y && bottom >= platform.y;
+      const withinX = rocket.x > platform.x && rocket.x < platform.x + platform.w;
+      if (!fromAbove || !withinX) {
+        return false;
+      }
+
+      const safeVertical = Math.abs(rocket.vy) <= WORLD.maxSafeVertical;
+      const safeHorizontal = Math.abs(rocket.vx) <= WORLD.maxSafeHorizontal;
+      const upright = Math.abs(rocket.angle + Math.PI / 2) <= WORLD.uprightTolerance;
+      if (safeVertical && safeHorizontal && upright) {
+        rocket.landed = true;
+        rocket.justLanded = true;
+        rocket.vx = 0;
+        rocket.vy = 0;
+        rocket.angle = -Math.PI / 2;
+        rocket.y = platform.y - 16;
+        return true;
+      }
+      explode(rocket, "hard landing");
+      return false;
+    }
+
+    function explode(rocket, reason) {
+      if (!rocket.alive) return;
+      rocket.alive = false;
+      rocket.vx = 0;
+      rocket.vy = 0;
+      rocket.explodeReason = reason;
+
+      const aliveRockets = state.rockets.filter((r) => r.alive);
+      if (aliveRockets.length === 0) {
+        concludeRound("draw", "Both rockets destroyed.");
+        return;
+      }
+
+      const killer = state.pendingWinner;
+      if (!killer && aliveRockets.length === 1) {
+        const survivor = aliveRockets[0];
+        state.pendingWinner = survivor.kind;
+        state.gameState = "pending";
+        statusEl.innerHTML = `<strong>${survivor.kind === "player" ? "You" : "AI"} scored a kill.</strong><br />Land safely to win.`;
+      } else if (killer && aliveRockets[0].kind === killer) {
+        statusEl.innerHTML = `<strong>${killer === "player" ? "You" : "AI"} crashed before landing.</strong><br />Round draw.`;
+        concludeRound("draw", "Killer crashed before landing.");
+      }
+    }
+
+    function concludeRound(result, message) {
+      state.gameState = result === "draw" ? "draw" : "win";
+      state.winner = result === "draw" ? null : state.pendingWinner;
+      if (result === "win") {
+        state.scores[state.winner] += 1;
+        scorePlayerEl.textContent = state.scores.player;
+        scoreAiEl.textContent = state.scores.ai;
+      }
+      statusEl.innerHTML = `<strong>${result === "draw" ? "Draw" : state.winner === "player" ? "You win" : "AI wins"}.</strong><br />${message} Tap or press space to reset.`;
+      state.timeSinceEnd = 0;
+    }
+
+    function fireBullet(rocket) {
+      const noseX = rocket.x + Math.cos(rocket.angle) * 18;
+      const noseY = rocket.y + Math.sin(rocket.angle) * 18;
+      state.bullets.push({
+        x: noseX,
+        y: noseY,
+        vx: rocket.vx + Math.cos(rocket.angle) * WORLD.bulletSpeed,
+        vy: rocket.vy + Math.sin(rocket.angle) * WORLD.bulletSpeed,
+        life: WORLD.bulletLife,
+        owner: rocket.kind,
+      });
+    }
+
+    function updateRocket(rocket, dt, controls) {
+      rocket.lastBottom = rocket.y + 16;
+      rocket.justLanded = false;
+
+      if (!rocket.alive) return;
+
+      if (rocket.landed) {
+        rocket.vx = 0;
+        rocket.vy = 0;
+        rocket.angle = -Math.PI / 2;
+        if (controls.thrust) {
+          rocket.landed = false;
+          rocket.vy -= 30;
+        }
+        return;
+      }
+
+      if (controls.left) rocket.angle -= WORLD.rotateSpeed * dt;
+      if (controls.right) rocket.angle += WORLD.rotateSpeed * dt;
+
+      if (controls.thrust) {
+        rocket.vx += Math.cos(rocket.angle) * WORLD.thrust * dt;
+        rocket.vy += Math.sin(rocket.angle) * WORLD.thrust * dt;
+      }
+
+      rocket.vy += WORLD.gravity * dt;
+
+      rocket.x += rocket.vx * dt;
+      rocket.y += rocket.vy * dt;
+
+      if (rocket.x < WORLD.sideBoundary) {
+        rocket.x = WORLD.sideBoundary;
+        rocket.vx *= -0.2;
+      }
+      if (rocket.x > WORLD.width - WORLD.sideBoundary) {
+        rocket.x = WORLD.width - WORLD.sideBoundary;
+        rocket.vx *= -0.2;
+      }
+      if (rocket.y < WORLD.topBoundary) {
+        rocket.y = WORLD.topBoundary;
+        rocket.vy *= -0.2;
+      }
+      if (rocket.y > WORLD.height + 30) {
+        explode(rocket, "fell out");
+      }
+
+      for (const platform of platforms) {
+        if (tryLand(rocket, platform)) {
+          return;
+        }
+      }
+
+      const rocketBox = rocketRect(rocket);
+      for (const wall of walls) {
+        if (rectsIntersect(rocketBox, wall)) {
+          explode(rocket, "hit wall");
+          return;
+        }
+      }
+    }
+
+    function updateBullets(dt) {
+      state.bullets = state.bullets.filter((bullet) => {
+        bullet.life -= dt;
+        bullet.x += bullet.vx * dt;
+        bullet.y += bullet.vy * dt;
+        if (
+          bullet.life <= 0 ||
+          bullet.x < -20 ||
+          bullet.x > WORLD.width + 20 ||
+          bullet.y < -20 ||
+          bullet.y > WORLD.height + 20
+        ) {
+          return false;
+        }
+
+        const bulletRect = { x: bullet.x - 2, y: bullet.y - 2, w: 4, h: 4 };
+        for (const platform of platforms) {
+          if (rectsIntersect(bulletRect, platform)) return false;
+        }
+        for (const wall of walls) {
+          if (rectsIntersect(bulletRect, wall)) return false;
+        }
+        for (const rocket of state.rockets) {
+          if (rocket.alive && rocket.kind !== bullet.owner) {
+            if (rectsIntersect(bulletRect, rocketRect(rocket))) {
+              explode(rocket, "shot");
+              state.pendingWinner = bullet.owner;
+              return false;
+            }
+          }
+        }
+        return true;
+      });
+    }
+
+    function aiControl(dt) {
+      const ai = state.rockets.find((r) => r.kind === "ai");
+      const player = state.rockets.find((r) => r.kind === "player");
+      if (!ai || !ai.alive) return { left: false, right: false, thrust: false, fire: false };
+
+      if (state.gameState === "pending" && state.pendingWinner === "ai") {
+        aiState.mode = "landing";
+      }
+
+      if (aiState.mode === "landing") {
+        return aiLandingControl(dt, ai);
+      }
+
+      if (ai.landed) {
+        aiState.groundedTimer += dt;
+        const controls = { left: false, right: false, thrust: false, fire: false };
+        if (aiState.groundedTimer > 0.45) {
+          controls.thrust = true;
+          aiState.groundedTimer = 0;
+        }
+        return controls;
+      }
+      aiState.groundedTimer = 0;
+
+      const desiredAngle = Math.atan2(player.y - ai.y, player.x - ai.x);
+      const bias = (Math.random() - 0.5) * 0.15;
+      const targetAngle = desiredAngle + bias;
+      const angleDiff = normalizeAngle(targetAngle - ai.angle);
+
+      const controls = { left: false, right: false, thrust: false, fire: false };
+      controls.left = angleDiff < -0.08;
+      controls.right = angleDiff > 0.08;
+
+      if (ai.y > WORLD.height * 0.6 || ai.vy > 50) {
+        controls.thrust = true;
+      }
+
+      aiState.reaction -= dt;
+      aiState.fireTimer -= dt;
+      const lineOfSight = Math.abs(player.x - ai.x) < 160 && Math.abs(player.y - ai.y) < 220;
+      if (aiState.fireTimer <= 0 && lineOfSight) {
+        controls.fire = true;
+        aiState.fireTimer = 0.6 + Math.random() * 0.6;
+      }
+
+      if (player.alive === false) {
+        aiState.mode = "landing";
+      }
+
+      return controls;
+    }
+
+    function aiLandingControl(dt, ai) {
+      const controls = { left: false, right: false, thrust: false, fire: false };
+      const targetPlatform = platforms[0];
+      const targetX = targetPlatform.x + targetPlatform.w / 2;
+      const aboveTarget = ai.y < targetPlatform.y - 80;
+
+      if (ai.landed) {
+        aiState.landTimer += dt;
+        if (state.gameState === "pending" && state.pendingWinner === "ai") {
+          if (aiState.landTimer > 0.4) {
+            concludeRound("win", "AI landed after the kill.");
+          }
+          return controls;
+        }
+        if (aiState.landTimer > 0.6) {
+          controls.thrust = true;
+          aiState.mode = "combat";
+          aiState.landStage = "approach";
+          aiState.landTimer = 0;
+        }
+        return controls;
+      }
+
+      if (aiState.landStage === "approach") {
+        if (Math.abs(ai.x - targetX) > 20) {
+          const angle = ai.x < targetX ? -Math.PI / 3 : -Math.PI * 2 / 3;
+          const diff = normalizeAngle(angle - ai.angle);
+          controls.left = diff < -0.05;
+          controls.right = diff > 0.05;
+          controls.thrust = true;
+        } else {
+          aiState.landStage = "descend";
+        }
+      }
+
+      if (aiState.landStage === "descend") {
+        const diff = normalizeAngle(-Math.PI / 2 - ai.angle);
+        controls.left = diff < -0.05;
+        controls.right = diff > 0.05;
+        if (ai.vy > 20 || !aboveTarget) {
+          controls.thrust = true;
+        }
+        if (Math.abs(ai.x - targetX) < 8 && ai.vy < 40) {
+          aiState.landStage = "final";
+        }
+      }
+
+      if (aiState.landStage === "final") {
+        const diff = normalizeAngle(-Math.PI / 2 - ai.angle);
+        controls.left = diff < -0.03;
+        controls.right = diff > 0.03;
+        if (ai.vy > 18) {
+          controls.thrust = true;
+        }
+      }
+
+      return controls;
+    }
+
+    function normalizeAngle(angle) {
+      let a = angle;
+      while (a > Math.PI) a -= Math.PI * 2;
+      while (a < -Math.PI) a += Math.PI * 2;
+      return a;
+    }
+
+    function update(dt) {
+      if (state.gameState === "win" || state.gameState === "draw") {
+        state.timeSinceEnd += dt;
+        return;
+      }
+
+      const playerControls = {
+        left: input.left || input.touchRotate < -0.2,
+        right: input.right || input.touchRotate > 0.2,
+        thrust: input.thrust || input.touchThrust,
+        fire: input.fire || input.touchFire,
+      };
+
+      const aiControls = aiControl(dt);
+
+      const rockets = state.rockets;
+      updateRocket(rockets[0], dt, playerControls);
+      updateRocket(rockets[1], dt, aiControls);
+
+      if (playerControls.fire && rockets[0].alive && input.fireCooldown <= 0) {
+        fireBullet(rockets[0]);
+        input.fireCooldown = 0.25;
+      }
+      if (aiControls.fire && rockets[1].alive) {
+        fireBullet(rockets[1]);
+      }
+
+      input.fireCooldown = Math.max(0, input.fireCooldown - dt);
+
+      updateBullets(dt);
+
+      if (state.gameState === "pending") {
+        const killer = state.rockets.find((r) => r.kind === state.pendingWinner);
+        if (killer && killer.landed) {
+          concludeRound("win", `${killer.kind === "player" ? "You" : "AI"} landed safely after the kill.`);
+        }
+      }
+    }
+
+    function drawRocket(rocket) {
+      ctx.save();
+      ctx.translate(rocket.x, rocket.y);
+      ctx.rotate(rocket.angle + Math.PI / 2);
+      ctx.fillStyle = rocket.kind === "player" ? "#6ee7ff" : "#ffb86b";
+      ctx.strokeStyle = "rgba(255,255,255,0.4)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, -16);
+      ctx.lineTo(10, 16);
+      ctx.lineTo(-10, 16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      if (!rocket.landed && rocket.alive) {
+        ctx.fillStyle = "rgba(255, 200, 120, 0.8)";
+        ctx.beginPath();
+        ctx.moveTo(-4, 16);
+        ctx.lineTo(0, 26 + Math.random() * 6);
+        ctx.lineTo(4, 16);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, WORLD.width, WORLD.height);
+
+      ctx.fillStyle = "rgba(110, 231, 255, 0.2)";
+      ctx.fillRect(0, WORLD.height - 4, WORLD.width, 4);
+
+      ctx.fillStyle = "#20314c";
+      for (const wall of walls) {
+        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+      }
+
+      ctx.fillStyle = "#2d3f63";
+      for (const platform of platforms) {
+        ctx.fillRect(platform.x, platform.y, platform.w, platform.h);
+      }
+
+      for (const bullet of state.bullets) {
+        ctx.fillStyle = bullet.owner === "player" ? "#6ee7ff" : "#ffb86b";
+        ctx.beginPath();
+        ctx.arc(bullet.x, bullet.y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (const rocket of state.rockets) {
+        if (rocket.alive) {
+          drawRocket(rocket);
+        } else {
+          ctx.fillStyle = "rgba(255, 107, 107, 0.7)";
+          ctx.beginPath();
+          ctx.arc(rocket.x, rocket.y, 18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    let lastTime = 0;
+    function loop(timestamp) {
+      const dt = Math.min(0.033, (timestamp - lastTime) / 1000 || 0);
+      lastTime = timestamp;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener("keydown", (event) => {
+      if (event.code === "ArrowLeft") input.left = true;
+      if (event.code === "ArrowRight") input.right = true;
+      if (event.code === "ArrowUp") input.thrust = true;
+      if (event.code === "Space") {
+        if (state.gameState === "win" || state.gameState === "draw") {
+          resetRound();
+        } else {
+          input.fire = true;
+        }
+      }
+    });
+
+    window.addEventListener("keyup", (event) => {
+      if (event.code === "ArrowLeft") input.left = false;
+      if (event.code === "ArrowRight") input.right = false;
+      if (event.code === "ArrowUp") input.thrust = false;
+      if (event.code === "Space") input.fire = false;
+    });
+
+    canvas.addEventListener("pointerdown", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const isRightSide = x > rect.width / 2;
+      if (state.gameState === "win" || state.gameState === "draw") {
+        resetRound();
+        return;
+      }
+      if (isRightSide) {
+        input.touchFire = true;
+      } else {
+        input.touchRotate = 0;
+        input.touchThrust = false;
+      }
+    });
+
+    canvas.addEventListener("pointermove", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const isRightSide = x > rect.width / 2;
+      if (!event.buttons) return;
+      if (isRightSide) {
+        input.touchFire = true;
+        return;
+      }
+      const dx = (x - rect.width / 4) / (rect.width / 4);
+      const dy = (rect.height / 2 - y) / (rect.height / 2);
+      input.touchRotate = clamp(dx, -1, 1);
+      input.touchThrust = dy > 0.3;
+    });
+
+    canvas.addEventListener("pointerup", () => {
+      input.touchRotate = 0;
+      input.touchThrust = false;
+      input.touchFire = false;
+    });
+
+    canvas.addEventListener("pointercancel", () => {
+      input.touchRotate = 0;
+      input.touchThrust = false;
+      input.touchFire = false;
+    });
+
+    resetRound();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
