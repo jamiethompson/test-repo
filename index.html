@@ -156,6 +156,7 @@
       landTimer: 0,
       fireTimer: 0,
       reaction: 0,
+      takeoffTimer: 0,
     };
 
     function createRocket(kind, x, y, angle) {
@@ -194,6 +195,7 @@
       aiState.landTimer = 0;
       aiState.fireTimer = 0;
       aiState.reaction = 0;
+      aiState.takeoffTimer = 0;
       statusEl.innerHTML = "<strong>Rocket Duel</strong><br />Left side drag = rotate/thrust. Right side tap/hold = fire.";
     }
 
@@ -341,6 +343,12 @@
       }
 
       const rocketBox = rocketRect(rocket);
+      for (const platform of platforms) {
+        if (rectsIntersect(rocketBox, platform)) {
+          explode(rocket, "hit platform");
+          return;
+        }
+      }
       for (const wall of walls) {
         if (rectsIntersect(rocketBox, wall)) {
           explode(rocket, "hit wall");
@@ -398,7 +406,19 @@
       }
 
       if (ai.landed) {
+        aiState.takeoffTimer = 0.45;
         return { left: false, right: false, thrust: true, fire: false };
+      }
+
+      if (aiState.takeoffTimer > 0) {
+        aiState.takeoffTimer -= dt;
+        const diff = normalizeAngle(-Math.PI / 2 - ai.angle);
+        return {
+          left: diff < -0.05,
+          right: diff > 0.05,
+          thrust: true,
+          fire: false,
+        };
       }
 
       const desiredAngle = Math.atan2(player.y - ai.y, player.x - ai.x);
