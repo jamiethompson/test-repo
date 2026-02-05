@@ -397,6 +397,10 @@
         return aiLandingControl(dt, ai);
       }
 
+      if (ai.landed) {
+        return { left: false, right: false, thrust: true, fire: false };
+      }
+
       const desiredAngle = Math.atan2(player.y - ai.y, player.x - ai.x);
       const bias = (Math.random() - 0.5) * 0.15;
       const targetAngle = desiredAngle + bias;
